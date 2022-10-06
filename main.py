@@ -106,9 +106,9 @@ if password == st.secrets['VIEWER_PASSWORD']:
     st.write("By item")
     st.table(items_df_paid.groupby('name').count()['customer_name'])
 
-    with st.expander("All invoices"):
-        st.write(df)
-    with st.expander("All items"):
-        st.write(items_df)
+    # with st.expander("All invoices"):
+    #     st.write(df)
+    # with st.expander("All items"):
+    #     st.write(items_df)
 elif password:
     st.sidebar.warning("Геть з України, москаль некрасівий! Ой, тобто, пароль неправильний.")
