@@ -1,4 +1,3 @@
-from tkinter import W
 import streamlit as st
 import pandas as pd
 from clients import WaveClient
@@ -82,7 +81,7 @@ def invoices_to_items_df(invoices):
 
 
 
-password = st.sidebar.text_input("Password")
+password = st.sidebar.text_input("Гасло!")
 
 if password == st.secrets['VIEWER_PASSWORD']:
     st.sidebar.info("OK")
