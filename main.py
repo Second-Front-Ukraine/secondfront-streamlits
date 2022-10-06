@@ -4,7 +4,7 @@ from clients import WaveClient
 
 wave = WaveClient()
 
-@st.experimental_memo(ttl=3600)
+@st.experimental_memo(ttl=600)
 def get_runforukraine_invoices():
     return wave.get_invoices_for_slug("2FUA-RUN4UA")
 
