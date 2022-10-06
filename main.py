@@ -5,7 +5,6 @@ from clients import WaveClient
 
 wave = WaveClient()
 
-
 @st.experimental_memo(ttl=3600)
 def get_runforukraine_invoices():
     return wave.get_invoices_for_slug("2FUA-RUN4UA")
@@ -81,26 +80,36 @@ def invoices_to_items_df(invoices):
 
     return df
 
-invoices = get_runforukraine_invoices()
-# st.write(invoices)
-df = invoices_to_df(invoices)
-items_df = invoices_to_items_df(invoices)
 
-df_paid = df[df['status'] == 'PAID']
-invoices_df_unpaid = df[(df['status'] != 'PAID') & (df['status'] != 'DRAFT')]
-items_df_paid = items_df[items_df['status'] == 'PAID']
 
-c0, c1, c2 = st.columns(3)
-c0.metric("Total collected", f"{df_paid['amountPaid'].sum():.2f}")
-c1.metric("Total registered", len(df_paid))
-c2.metric("Total abandoned", len(invoices_df_unpaid))
-st.write("By country")
-st.table(df_paid.groupby('address_country').count()['customer_name'])
+password = st.sidebar.text_input("Password")
 
-st.write("By item")
-st.table(items_df_paid.groupby('name').count()['customer_name'])
+if password == st.secrets['VIEWER_PASSWORD']:
+    st.sidebar.info("OK")
 
-with st.expander("All invoices"):
-    st.write(df)
-with st.expander("All items"):
-    st.write(items_df)
+    st.markdown("# Run For Ukraine registration stats")
+    invoices = get_runforukraine_invoices()
+    # st.write(invoices)
+    df = invoices_to_df(invoices)
+    items_df = invoices_to_items_df(invoices)
+
+    df_paid = df[df['status'] == 'PAID']
+    invoices_df_unpaid = df[(df['status'] != 'PAID') & (df['status'] != 'DRAFT')]
+    items_df_paid = items_df[items_df['status'] == 'PAID']
+
+    c0, c1, c2 = st.columns(3)
+    c0.metric("Total collected", f"{df_paid['amountPaid'].sum():.2f}")
+    c1.metric("Total registered", len(df_paid))
+    c2.metric("Total abandoned", len(invoices_df_unpaid))
+    st.write("By country")
+    st.table(df_paid.groupby('address_country').count()['customer_name'])
+
+    st.write("By item")
+    st.table(items_df_paid.groupby('name').count()['customer_name'])
+
+    with st.expander("All invoices"):
+        st.write(df)
+    with st.expander("All items"):
+        st.write(items_df)
+elif password:
+    st.sidebar.warning("Геть з України, москаль некрасівий! Ой, тобто, пароль неправильний.")
