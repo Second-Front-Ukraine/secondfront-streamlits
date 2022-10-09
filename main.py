@@ -1,12 +1,20 @@
 import streamlit as st
 import pandas as pd
 from clients import WaveClient
+from geopy.geocoders import Nominatim
+
 
 wave = WaveClient()
+geolocator = Nominatim(user_agent="example app")
 
 @st.experimental_memo(ttl=600)
 def get_runforukraine_invoices():
     return wave.get_invoices_for_slug("2FUA-RUN4UA")
+
+
+@st.cache
+def get_point(location):
+    return geolocator.geocode(location).point
 
 
 def invoices_to_df(invoices):
@@ -15,6 +23,17 @@ def invoices_to_df(invoices):
     for inv in invoices:
         shipping_details = inv['node']['customer'].get('shippingDetails') or {}
         shipping_address = shipping_details.get('address') or {}
+        city = shipping_address.get('city')
+        province = (shipping_address.get('province') or {}).get('name')
+        country = (shipping_address.get('country') or {}).get('name')
+
+        if country:
+            loc = city if city else ''
+            loc += f"{', ' if loc else ''}{province}" if province else ''
+            loc += f"{', ' if loc else ''}{country}"
+            point = get_point(loc)
+        else:
+            point = (0, 0)
 
         data.append({
             'memo': inv['node']['memo'],
@@ -27,10 +46,12 @@ def invoices_to_df(invoices):
             'customer_phone': shipping_details.get('phone'),
             'address_line_1': shipping_address.get('addressLine1'),
             'address_line_2': shipping_address.get('addressLine2'),
-            'address_city': shipping_address.get('city'),
-            'address_province': (shipping_address.get('province') or {}).get('name'),
-            'address_country': (shipping_address.get('country') or {}).get('name'),
+            'address_city': city,
+            'address_province': province,
+            'address_country': country,
             'address_postal_code': shipping_address.get('postalCode', None),
+            'lat': point[0],
+            'lon': point[1],
         })
 
     df = pd.DataFrame(data)
@@ -80,13 +101,12 @@ def invoices_to_items_df(invoices):
     return df
 
 
-
-password = st.sidebar.text_input("Гасло!")
+password = st.text_input("Гасло!", type="password")
 
 if password == st.secrets['VIEWER_PASSWORD']:
-    st.sidebar.info("OK")
+    st.info("OK")
 
-    st.markdown("# Run For Ukraine registration stats")
+    st.title("Run For Ukraine registration stats")
     invoices = get_runforukraine_invoices()
     # st.write(invoices)
     df = invoices_to_df(invoices)
@@ -100,15 +120,29 @@ if password == st.secrets['VIEWER_PASSWORD']:
     c0.metric("Total collected", f"{df_paid['amountPaid'].sum():.2f}")
     c1.metric("Total registered", len(df_paid))
     c2.metric("Total abandoned", len(invoices_df_unpaid))
-    st.write("By country")
-    st.table(df_paid.groupby('address_country').count()['customer_name'])
+    st.header("By country")
+    st.table(df_paid.groupby(['address_country']).count()['customer_name'])
 
-    st.write("By item")
+    with st.expander("By province/state"):
+        st.table(df_paid.groupby(['address_country', 'address_province']).count()['customer_name'])
+
+    st.header("By item")
     st.table(items_df_paid.groupby('name').count()['customer_name'])
 
+    st.header("Notes")
+    paid_memos = df[(df['memo'].str.len() > 0)]
+    for _, inv in paid_memos.iterrows():
+        st.markdown(f"*{inv['customer_name']}* from *{inv['address_city']}, {inv['address_country']}* {'registered and' if inv['status'] == 'PAID' else ''} said  \n> {inv['memo']}")
+
+    st.header("Map")
+    st.map(df_paid[['lat', 'lon']])
+
+    # st.markdown("---")
     # with st.expander("All invoices"):
     #     st.write(df)
     # with st.expander("All items"):
     #     st.write(items_df)
+
+    
 elif password:
-    st.sidebar.warning("Геть з України, москаль некрасівий! Ой, тобто, пароль неправильний.")
+    st.warning("Геть з України, москаль некрасівий! Ой, тобто, пароль неправильний.")
