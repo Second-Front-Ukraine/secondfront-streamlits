@@ -106,7 +106,7 @@ class WaveClient:
 
             # Check for next page
             total_pages = response['business']['invoices']['pageInfo']['totalPages']
-            if total_pages >= page:
+            if page >= total_pages:
                 break
             page += 1
         
