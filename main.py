@@ -13,8 +13,23 @@ def get_runforukraine_invoices():
 
 
 @st.cache
-def get_point(location):
-    return geolocator.geocode(location).point
+def get_point(city, province, country):
+    loc = city if city else ''
+    loc += f"{', ' if loc else ''}{province}" if province else ''
+    loc += f"{', ' if loc else ''}{country}"
+
+    geo = geolocator.geocode(loc)
+
+    if geo is None:
+        loc = province if province else ''
+        loc += f"{', ' if loc else ''}{country}"
+        geo = geolocator.geocode(loc)
+
+    if geo is None:
+        geo = geolocator.geocode(country)
+
+    if geo is not None: 
+        return geo.point
 
 
 def invoices_to_df(invoices):
@@ -28,10 +43,7 @@ def invoices_to_df(invoices):
         country = (shipping_address.get('country') or {}).get('name')
 
         if country:
-            loc = city if city else ''
-            loc += f"{', ' if loc else ''}{province}" if province else ''
-            loc += f"{', ' if loc else ''}{country}"
-            point = get_point(loc)
+            point = get_point(city, province, country)
         else:
             point = (0, 0)
 
