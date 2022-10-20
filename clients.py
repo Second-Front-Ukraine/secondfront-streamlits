@@ -25,6 +25,9 @@ INVOICES_QUERY = gql("""query($businessId: ID!, $page: Int!, $slug: String!) {
           footer
           memo
           status
+          lastSentAt
+          lastSentVia
+          createdAt
           amountDue {
             raw
             value
