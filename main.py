@@ -171,7 +171,7 @@ if password == st.secrets['VIEWER_PASSWORD']:
     st.header("Notes")
     paid_memos = df[(df['memo'].str.len() > 0)]
     for _, inv in paid_memos.iterrows():
-        st.markdown(f"*{inv['customer_name']}* from *{inv['address_city']}, {inv['address_country']}* {'registered and' if inv['status'] == 'PAID' else ''} said  \n> {inv['memo']}")
+        st.markdown(f"*{inv['customer_name']}* from *{inv['address_city']}, {inv['address_country']}* {'registered and' if inv['status'] == 'PAID' else ''} said  \n```\n{inv['memo']}```")
 
     if show_map:
         st.header("Map")
@@ -182,24 +182,58 @@ if password == st.secrets['VIEWER_PASSWORD']:
     if show_participants:
         c0, c1, c2, c3 = st.columns(4)
         show_df = df
-        filter_status = c0.selectbox("Status", ("ALL", "PAID", "SAVED", "VIEWED", "OVERDUE"), index=1)
-        filter_sent_status = c1.selectbox("Status", ("ALL", "NOT_SENT", "MARKED_SENT"), index=1)
+        filter_status = c0.selectbox("Registration status", ("ALL", "PAID", "SAVED", "VIEWED", "OVERDUE"), index=1)
+        filter_sent_status = c1.selectbox("Email Confirmation", ("ALL", "NOT_SENT", "MARKED_SENT"), index=1)
+        filter_country = c2.selectbox("Country", ["ALL", *show_df['address_country'].unique()])
+        filter_text = c3.text_input("Search fields")
+        show_columns = st.multiselect("Show columns", list(show_df.columns), ['invoice_number', 'customer_name', 'amountPaid', 'status', 'address_country', 'registered_at'])
         if filter_status != "ALL":
             show_df = show_df[show_df['status'] == filter_status]
         if filter_sent_status != "ALL":
             show_df = show_df[show_df['last_sent_via'] == filter_sent_status]
-        st.write(show_df)
+        if filter_country != "ALL":
+            show_df = show_df[show_df['address_country'] == filter_country]
+        if filter_text:
+            search = (
+                show_df['customer_name'].str.contains(filter_text, case=False) |
+                show_df['customer_email'].str.contains(filter_text, case=False) |
+                show_df['invoice_number'].str.contains(filter_text, case=False) |
+                show_df['customer_phone'].str.contains(filter_text, case=False) |
+                show_df['address_city'].str.contains(filter_text, case=False) |
+                show_df['address_province'].str.contains(filter_text, case=False) |
+                show_df['address_postal_code'].str.contains(filter_text, case=False) |
+                show_df['address_line_1'].str.contains(filter_text, case=False) |
+                show_df['memo'].str.contains(filter_text, case=False)
+            )
+            show_df = show_df[search]
+
+        st.write(show_df[show_columns])
     show_items = st.checkbox("Show items", False)
     if show_items:
-        c0, c1, c2, c3 = st.columns(4)
+        c0, c1 = st.columns(2)
         show_df = items_df
         filter_status = c0.selectbox("Status", ("ALL", "PAID", "SAVED", "VIEWED", "OVERDUE"), index=1)
+        filter_text = c1.text_input("Search")
+        filter_item = st.selectbox("Item", ("ALL", *list(show_df['name'].unique())))
+        show_columns = st.multiselect("Show columns", list(show_df.columns), ['invoice_number', 'status', 'address_country', 'name', 'quantity', 'customer_name', 'amountPaid'])
         if filter_status != "ALL":
             show_df = show_df[show_df['status'] == filter_status]
-        filter_item = st.selectbox("Item", ("ALL", *list(show_df['name'].unique())))
         if filter_item != "ALL":
             show_df = show_df[show_df['name'] == filter_item]
-        st.write(show_df)
+        if filter_text:
+            search = (
+                show_df['customer_name'].str.contains(filter_text, case=False) |
+                show_df['customer_email'].str.contains(filter_text, case=False) |
+                show_df['invoice_number'].str.contains(filter_text, case=False) |
+                show_df['customer_phone'].str.contains(filter_text, case=False) |
+                show_df['address_city'].str.contains(filter_text, case=False) |
+                show_df['address_province'].str.contains(filter_text, case=False) |
+                show_df['address_postal_code'].str.contains(filter_text, case=False) |
+                show_df['address_line_1'].str.contains(filter_text, case=False) |
+                show_df['memo'].str.contains(filter_text, case=False)
+            )
+            show_df = show_df[search]
+        st.write(show_df[show_columns])
 
     
 elif password:
