@@ -234,6 +234,9 @@ if password == st.secrets['VIEWER_PASSWORD']:
             )
             show_df = show_df[search]
         st.write(show_df[show_columns])
+    
+    if st.button("Clear cache"):
+        st.experimental_memo.clear()
 
     
 elif password:
