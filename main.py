@@ -15,16 +15,16 @@ def get_runforukraine_invoices():
 @st.cache
 def get_point(city, province, country):
     loc = city if city else ''
-    loc += f"{', ' if loc else ''}{province}" if province else ''
+    # loc += f"{', ' if loc else ''}{province}" if province else ''
     loc += f"{', ' if loc else ''}{country}"
 
     # try:
     geo = geolocator.geocode(loc)
 
-    if geo is None:
-        loc = province if province else ''
-        loc += f"{', ' if loc else ''}{country}"
-        geo = geolocator.geocode(loc)
+    # if geo is None:
+    #     loc = province if province else ''
+    #     loc += f"{', ' if loc else ''}{country}"
+    #     geo = geolocator.geocode(loc)
 
     if geo is None:
         geo = geolocator.geocode(country)
@@ -142,7 +142,7 @@ password = st.text_input("Гасло!", type="password")
 
 if password == st.secrets['VIEWER_PASSWORD']:
     st.info("OK")
-    show_map = st.checkbox("Show map", False)
+    show_map = st.checkbox("Show map", True)
 
     st.title("Run For Ukraine registration stats")
     invoices = get_runforukraine_invoices()
