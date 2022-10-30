@@ -207,6 +207,7 @@ if password == st.secrets['VIEWER_PASSWORD']:
             )
             show_df = show_df[search]
 
+        st.markdown(f"Showing {len(show_df)} out of all {len(df)}")
         st.write(show_df[show_columns])
     show_items = st.checkbox("Show items", False)
     if show_items:
@@ -233,6 +234,7 @@ if password == st.secrets['VIEWER_PASSWORD']:
                 show_df['memo'].str.contains(filter_text, case=False)
             )
             show_df = show_df[search]
+        st.markdown(f"Showing {len(show_df)} out of all {len(items_df)}")
         st.write(show_df[show_columns])
     
     if st.button("Clear cache"):
