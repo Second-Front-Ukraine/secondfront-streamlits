@@ -79,9 +79,9 @@ def invoices_to_df(invoices, show_map=False):
         })
 
     df = pd.DataFrame(data)
-    df['total'] = df['total'].replace(',', '').astype(float)
-    df['amountDue'] = df['amountDue'].replace(',', '').astype(float)
-    df['amountPaid'] = df['amountPaid'].replace(',', '').astype(float)
+    df['total'] = df['total'].str.replace(',', '').astype(float)
+    df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
+    df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
 
     return df
 
@@ -129,11 +129,11 @@ def invoices_to_items_df(invoices):
             })
 
     df = pd.DataFrame(data)
-    df['total'] = df['total'].replace(',', '').astype(float)
-    df['amountDue'] = df['amountDue'].replace(',', '').astype(float)
-    df['amountPaid'] = df['amountPaid'].replace(',', '').astype(float)
-    df['unitPrice'] = df['unitPrice'].replace(',', '').astype(float)
-    df['quantity'] = df['quantity'].astype(int)
+    df['total'] = df['total'].str.replace(',', '').astype(float)
+    df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
+    df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
+    df['unitPrice'] = df['unitPrice'].str.replace(',', '').astype(float)
+    df['quantity'] = df['quantity'].str.astype(int)
 
     return df
 
@@ -146,7 +146,11 @@ if password == st.secrets['VIEWER_PASSWORD']:
 
     st.title("Run For Ukraine registration stats")
     invoices = get_runforukraine_invoices()
-    df = invoices_to_df(invoices, show_map=show_map)
+    try:
+        df = invoices_to_df(invoices, show_map=show_map)
+    except Exception:
+        print(invoices)
+        raise
     items_df = invoices_to_items_df(invoices)
 
     df_paid = df[df['status'] == 'PAID']
