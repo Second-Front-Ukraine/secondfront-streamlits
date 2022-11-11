@@ -79,9 +79,9 @@ def invoices_to_df(invoices, show_map=False):
         })
 
     df = pd.DataFrame(data)
-    df['total'] = df['total'].astype(float)
-    df['amountDue'] = df['amountDue'].astype(float)
-    df['amountPaid'] = df['amountPaid'].astype(float)
+    df['total'] = df['total'].replace(',', '').astype(float)
+    df['amountDue'] = df['amountDue'].replace(',', '').astype(float)
+    df['amountPaid'] = df['amountPaid'].replace(',', '').astype(float)
 
     return df
 
@@ -129,10 +129,10 @@ def invoices_to_items_df(invoices):
             })
 
     df = pd.DataFrame(data)
-    df['total'] = df['total'].astype(float)
-    df['amountDue'] = df['amountDue'].astype(float)
-    df['amountPaid'] = df['amountPaid'].astype(float)
-    df['unitPrice'] = df['unitPrice'].astype(float)
+    df['total'] = df['total'].replace(',', '').astype(float)
+    df['amountDue'] = df['amountDue'].replace(',', '').astype(float)
+    df['amountPaid'] = df['amountPaid'].replace(',', '').astype(float)
+    df['unitPrice'] = df['unitPrice'].replace(',', '').astype(float)
     df['quantity'] = df['quantity'].astype(int)
 
     return df
