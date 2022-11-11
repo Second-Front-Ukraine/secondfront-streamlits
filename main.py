@@ -133,7 +133,7 @@ def invoices_to_items_df(invoices):
     df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
     df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
     df['unitPrice'] = df['unitPrice'].str.replace(',', '').astype(float)
-    df['quantity'] = df['quantity'].str.astype(int)
+    df['quantity'] = df['quantity'].astype(int)
 
     return df
 
