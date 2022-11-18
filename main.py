@@ -137,6 +137,10 @@ def invoices_to_items_df(invoices):
 
     return df
 
+@st.cache
+def convert_df(df):
+    # IMPORTANT: Cache the conversion to prevent computation on every rerun
+    return df.to_csv().encode('utf-8')
 
 password = st.text_input("Гасло!", type="password")
 
@@ -175,7 +179,7 @@ if password == st.secrets['VIEWER_PASSWORD']:
     st.header("Notes")
     paid_memos = df[(df['memo'].str.len() > 0)]
     for _, inv in paid_memos.iterrows():
-        st.markdown(f"*{inv['customer_name']}* from *{inv['address_city']}, {inv['address_country']}* {'registered and' if inv['status'] == 'PAID' else ''} said  \n```\n{inv['memo']}```")
+        st.markdown(f"*{inv['customer_name']}* from *{inv['address_city']}, {inv['address_country']}* {'registered and' if inv['status'] == 'PAID' else ''} said  \n```\n{inv['memo']}")
 
     if show_map:
         st.header("Map")
@@ -213,6 +217,13 @@ if password == st.secrets['VIEWER_PASSWORD']:
 
         st.markdown(f"Showing {len(show_df)} out of all {len(df)}")
         st.write(show_df[show_columns])
+        st.download_button(
+            label="Download the participants table above as CSV",
+            data=convert_df(show_df[show_columns]),
+            file_name='participants.csv',
+            mime='text/csv',
+        )
+    st.markdown("---")
     show_items = st.checkbox("Show items", False)
     if show_items:
         c0, c1 = st.columns(2)
@@ -240,7 +251,14 @@ if password == st.secrets['VIEWER_PASSWORD']:
             show_df = show_df[search]
         st.markdown(f"Showing {len(show_df)} out of all {len(items_df)}")
         st.write(show_df[show_columns])
+        st.download_button(
+            label="Download the items table above as CSV",
+            data=convert_df(show_df[show_columns]),
+            file_name='items.csv',
+            mime='text/csv',
+        )
     
+    st.markdown("---")
     if st.button("Clear cache"):
         st.experimental_memo.clear()
 
