@@ -116,7 +116,7 @@ def convert_df(df):
 
 password = st.text_input("Гасло!", type="password")
 
-if password == st.secrets['VIEWER_PASSWORD_SVTBV']:
+if password == st.secrets['VIEWER_PASSWORD_ST4ST']:
     st.info("OK")
 
     st.title(f"{CAMPAIGN} stats")
