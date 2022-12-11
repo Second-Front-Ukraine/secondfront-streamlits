@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import pandas as pd
 from clients import WaveClient
@@ -7,12 +8,22 @@ from geopy.geocoders import Nominatim
 wave = WaveClient()
 geolocator = Nominatim(user_agent="example app")
 
+MEMO_RE = re.compile(r"Company name\:(?P<company>.*)\nNote\:(?P<comment>.*)")
 CAMPAIGN = "2FUA-SVTBV"
 
 @st.experimental_memo(ttl=600)
 def get_capmaign_invoices(slug):
     return wave.get_invoices_for_slug(slug)
 
+
+def parse_memo(memo):
+    match = MEMO_RE.match(memo)
+    if match:
+        components = match.groupdict()
+
+        return components['comment'].strip(), components['company'].strip()
+
+    return memo, None
 
 def invoices_to_df(invoices):
     data = []
@@ -28,9 +39,12 @@ def invoices_to_df(invoices):
         else:
             province = (shipping_address.get('province') or {}).get('name')
         country = (shipping_address.get('country') or {}).get('name')
+        comment, company = parse_memo(inv['node']['memo'])
 
         data.append({
             'memo': inv['node']['memo'],
+            'comment': comment,
+            'company': company,
             'status': inv['node']['status'],
             'invoice_number': inv['node']['invoiceNumber'],
             'last_sent_at': inv['node']['lastSentAt'],
@@ -72,10 +86,13 @@ def invoices_to_items_df(invoices):
         else:
             province = (shipping_address.get('province') or {}).get('name')
         country = (shipping_address.get('country') or {}).get('name')
+        comment, company = parse_memo(inv['node']['memo'])
 
         for item in inv['node']['items']:
             data.append({
                 'memo': inv['node']['memo'],
+                'comment': comment,
+                'company': company,
                 'status': inv['node']['status'],
                 'invoice_number': inv['node']['invoiceNumber'],
                 'last_sent_at': inv['node']['lastSentAt'],
@@ -142,13 +159,20 @@ if password == st.secrets['VIEWER_PASSWORD_SVTBV']:
     st.write("Amounts distribution")
     st.bar_chart(df_paid['amountPaid'].value_counts())
 
+    st.header("By company")
+    st.subheader("Counts")
+    st.table(df_paid.groupby(['company']).count()['customer_name'])
+    st.subheader("Amounts")
+    st.table(df_paid.groupby(['company']).sum()['amountPaid'])
+
     st.header("By item")
     st.table(items_df_paid.groupby('name').count()['customer_name'])
 
     st.header("Notes")
-    paid_memos = df[(df['memo'].str.len() > 0)]
+    paid_memos = df[(df['comment'].str.len() > 0)]
     for _, inv in paid_memos.iterrows():
-        st.markdown(f"*{inv['customer_name']}* from *{inv['address_city']}, {inv['address_country']}* {'registered and' if inv['status'] == 'PAID' else ''} said  \n```\n{inv['memo']}")
+        company_span = f"from *{inv['company']}*" if inv['company'] else ''
+        st.markdown(f"*{inv['customer_name']}* {company_span} {'registered and' if inv['status'] == 'PAID' else ''} said  \n```\n{inv['comment']}")
 
     st.markdown("---")
     show_donors = st.checkbox("Show donors", False)
