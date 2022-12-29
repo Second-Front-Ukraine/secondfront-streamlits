@@ -1,6 +1,7 @@
 import re
 import streamlit as st
 import pandas as pd
+import altair as alt
 from clients import WaveClient
 from geopy.geocoders import Nominatim
 
@@ -68,6 +69,8 @@ def invoices_to_df(invoices):
     df['total'] = df['total'].str.replace(',', '').astype(float)
     df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
     df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
+    df['registered_at'] = pd.to_datetime(df['registered_at'])
+    df['registered_at_date'] = df['registered_at'].dt.date
 
     return df
 
@@ -123,6 +126,8 @@ def invoices_to_items_df(invoices):
     df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
     df['unitPrice'] = df['unitPrice'].str.replace(',', '').astype(float)
     df['quantity'] = df['quantity'].astype(int)
+    df['registered_at'] = pd.to_datetime(df['registered_at'])
+    df['registered_at_date'] = df['registered_at'].dt.date
 
     return df
 
@@ -158,6 +163,37 @@ if password == st.secrets['VIEWER_PASSWORD_SVTBV']:
 
     st.write("Amounts distribution")
     st.bar_chart(df_paid['amountPaid'].value_counts())
+
+    hover = alt.selection_single(
+        fields=["registered_at_date"],
+        nearest=True,
+        on="mouseover",
+        # empty="none",
+        clear="mouseout"
+    )
+    amount_chart = alt.Chart(df_paid).mark_bar(color='#57A44C').encode(
+        x=alt.X('registered_at_date:T', axis=alt.Axis(title='Date')),
+        y=alt.Y('sum(amountPaid):Q', axis=alt.Axis(title='Sum of amountPaid', titleColor='#57A44C')),
+    )
+    text_chart = amount_chart.mark_text(
+        align='left',
+        baseline='middle',
+        dy=-10,
+        dx=-10,
+        color="#57A44C"
+    ).encode(
+        text='sum(amountPaid):Q'
+    )
+    count_chart = alt.Chart(df_paid).mark_circle(color='#007bff', size=60).encode(
+        x=alt.X('registered_at_date:T', axis=alt.Axis(title='Date')),
+        y=alt.Y('count():Q',
+          axis=alt.Axis(title='Count of Donations', titleColor='#007bff')),
+    )
+    st.altair_chart(alt.layer(amount_chart + text_chart, count_chart).resolve_scale(
+        y = 'independent'
+    ).add_selection(
+        hover
+    ).configure(padding=50).interactive(), use_container_width=True)
 
     st.header("By company")
     st.subheader("Counts")
