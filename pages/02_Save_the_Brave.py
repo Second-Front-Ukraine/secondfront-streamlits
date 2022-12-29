@@ -8,7 +8,7 @@ from geopy.geocoders import Nominatim
 wave = WaveClient()
 geolocator = Nominatim(user_agent="example app")
 
-MEMO_RE = re.compile(r"Company name\:(?P<company>.*)\nNote\:(?P<comment>.*)")
+MEMO_RE = re.compile(r"(Company name\:(?P<company>.*))?\n*(Note\:(?P<comment>.*))?")
 CAMPAIGN = "2FUA-SVTBV"
 
 @st.experimental_memo(ttl=600)
@@ -21,7 +21,7 @@ def parse_memo(memo):
     if match:
         components = match.groupdict()
 
-        return components['comment'].strip(), components['company'].strip()
+        return (components.get('comment') or '').strip(), (components.get('company') or '').strip()
 
     return memo, None
 
