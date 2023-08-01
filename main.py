@@ -1,5 +1,11 @@
 import streamlit as st
 
+
+st.set_page_config(
+    page_title="Second Front Stats",
+    page_icon="⚔️",
+)
+
 txt = """
 # Second Front Ukraine Foundation campaign stats
 This app shows donations and registrations by campaign for Second Front.

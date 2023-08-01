@@ -1,4 +1,3 @@
-import re
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -9,22 +8,12 @@ from geopy.geocoders import Nominatim
 wave = WaveClient()
 geolocator = Nominatim(user_agent="example app")
 
-MEMO_RE = re.compile(r"(Company name\:(?P<company>.*))?\n*(Note\:(?P<comment>.*))?")
-CAMPAIGN = "2FUA-SVTBV"
+CAMPAIGN = "UW-ST4ST"
 
-@st.experimental_memo(ttl=600)
+@st.cache_data(ttl=600)
 def get_capmaign_invoices(slug):
     return wave.get_invoices_for_slug(slug)
 
-
-def parse_memo(memo):
-    match = MEMO_RE.match(memo)
-    if match:
-        components = match.groupdict()
-
-        return (components.get('comment') or '').strip(), (components.get('company') or '').strip()
-
-    return memo, None
 
 def invoices_to_df(invoices):
     data = []
@@ -40,12 +29,9 @@ def invoices_to_df(invoices):
         else:
             province = (shipping_address.get('province') or {}).get('name')
         country = (shipping_address.get('country') or {}).get('name')
-        comment, company = parse_memo(inv['node']['memo'])
 
         data.append({
             'memo': inv['node']['memo'],
-            'comment': comment,
-            'company': company,
             'status': inv['node']['status'],
             'invoice_number': inv['node']['invoiceNumber'],
             'last_sent_at': inv['node']['lastSentAt'],
@@ -89,13 +75,10 @@ def invoices_to_items_df(invoices):
         else:
             province = (shipping_address.get('province') or {}).get('name')
         country = (shipping_address.get('country') or {}).get('name')
-        comment, company = parse_memo(inv['node']['memo'])
 
         for item in inv['node']['items']:
             data.append({
                 'memo': inv['node']['memo'],
-                'comment': comment,
-                'company': company,
                 'status': inv['node']['status'],
                 'invoice_number': inv['node']['invoiceNumber'],
                 'last_sent_at': inv['node']['lastSentAt'],
@@ -131,14 +114,14 @@ def invoices_to_items_df(invoices):
 
     return df
 
-@st.cache
+@st.cache_data
 def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv().encode('utf-8')
 
 password = st.text_input("Гасло!", type="password")
 
-if password == st.secrets['VIEWER_PASSWORD_SVTBV']:
+if password == st.secrets['VIEWER_PASSWORD_ST4ST']:
     st.info("OK")
 
     st.title(f"{CAMPAIGN} stats")
@@ -163,7 +146,7 @@ if password == st.secrets['VIEWER_PASSWORD_SVTBV']:
 
     st.write("Amounts distribution")
     st.bar_chart(df_paid['amountPaid'].value_counts())
-
+    
     hover = alt.selection_single(
         fields=["registered_at_date"],
         nearest=True,
@@ -195,20 +178,13 @@ if password == st.secrets['VIEWER_PASSWORD_SVTBV']:
         hover
     ).configure(padding=50).interactive(), use_container_width=True)
 
-    st.header("By company")
-    st.subheader("Counts")
-    st.table(df_paid.groupby(['company']).count()['customer_name'])
-    st.subheader("Amounts")
-    st.table(df_paid.groupby(['company']).sum()['amountPaid'])
-
     st.header("By item")
     st.table(items_df_paid.groupby('name').count()['customer_name'])
 
     st.header("Notes")
-    paid_memos = df[(df['comment'].str.len() > 0)]
+    paid_memos = df[(df['memo'].str.len() > 0)]
     for _, inv in paid_memos.iterrows():
-        company_span = f"from *{inv['company']}*" if inv['company'] else ''
-        st.markdown(f"*{inv['customer_name']}* {company_span} {'registered and' if inv['status'] == 'PAID' else ''} said  \n```\n{inv['comment']}")
+        st.markdown(f"*{inv['customer_name']}* from *{inv['address_city']}, {inv['address_country']}* {'registered and' if inv['status'] == 'PAID' else ''} said  \n```\n{inv['memo']}")
 
     st.markdown("---")
     show_donors = st.checkbox("Show donors", False)
@@ -248,7 +224,7 @@ if password == st.secrets['VIEWER_PASSWORD_SVTBV']:
     
     st.markdown("---")
     if st.button("Clear cache"):
-        st.experimental_memo.clear()
+        st.cache_data.clear()
 
     
 elif password:

@@ -8,14 +8,35 @@ from geopy.geocoders import Nominatim
 wave = WaveClient()
 geolocator = Nominatim(user_agent="example app")
 
-CAMPAIGN = "UW-ST4ST"
-
-@st.experimental_memo(ttl=600)
-def get_capmaign_invoices(slug):
+@st.cache_data(ttl=600)
+def get_runforukraine_invoices(slug):
     return wave.get_invoices_for_slug(slug)
 
 
-def invoices_to_df(invoices):
+@st.cache_data
+def get_point(city, province, country):
+    loc = city if city else ''
+    # loc += f"{', ' if loc else ''}{province}" if province else ''
+    loc += f"{', ' if loc else ''}{country}"
+
+    # try:
+    geo = geolocator.geocode(loc)
+
+    # if geo is None:
+    #     loc = province if province else ''
+    #     loc += f"{', ' if loc else ''}{country}"
+    #     geo = geolocator.geocode(loc)
+
+    if geo is None:
+        geo = geolocator.geocode(country)
+    # except Exception:
+    #     return (0, 0)
+
+    if geo is not None: 
+        return geo.point
+
+
+def invoices_to_df(invoices, show_map=False):
     data = []
 
     for inv in invoices:
@@ -29,6 +50,11 @@ def invoices_to_df(invoices):
         else:
             province = (shipping_address.get('province') or {}).get('name')
         country = (shipping_address.get('country') or {}).get('name')
+
+        if country and show_map:
+            point = get_point(city, province, country)
+        else:
+            point = (0, 0)
 
         data.append({
             'memo': inv['node']['memo'],
@@ -49,6 +75,8 @@ def invoices_to_df(invoices):
             'address_province': province,
             'address_country': country,
             'address_postal_code': shipping_address.get('postalCode', None),
+            'lat': point[0],
+            'lon': point[1],
         })
 
     df = pd.DataFrame(data)
@@ -114,20 +142,21 @@ def invoices_to_items_df(invoices):
 
     return df
 
-@st.cache
+@st.cache_data
 def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv().encode('utf-8')
 
 password = st.text_input("Гасло!", type="password")
 
-if password == st.secrets['VIEWER_PASSWORD_ST4ST']:
+if password == st.secrets['VIEWER_PASSWORD']:
     st.info("OK")
+    show_map = st.checkbox("Show map", False)
 
-    st.title(f"{CAMPAIGN} stats")
-    invoices = get_capmaign_invoices(CAMPAIGN)
+    st.title("Run For Ukraine registration stats")
+    invoices = get_runforukraine_invoices("2FUA-RUN4UA")
     try:
-        df = invoices_to_df(invoices)
+        df = invoices_to_df(invoices, show_map=show_map)
     except Exception:
         print(invoices)
         raise
@@ -140,13 +169,10 @@ if password == st.secrets['VIEWER_PASSWORD_ST4ST']:
 
     c0, c1, c2, c3 = st.columns(4)
     c0.metric("Total collected", f"{df_paid['amountPaid'].sum():.2f}")
-    # c1.metric("Emails unsent", len(df_paid_unconfired))
-    c2.metric("Total donated", len(df_paid))
+    c1.metric("Total unconfirmed", len(df_paid_unconfired))
+    c2.metric("Total registered", len(df_paid))
     c3.metric("Total abandoned", len(invoices_df_unpaid))
 
-    st.write("Amounts distribution")
-    st.bar_chart(df_paid['amountPaid'].value_counts())
-    
     hover = alt.selection_single(
         fields=["registered_at_date"],
         nearest=True,
@@ -178,6 +204,12 @@ if password == st.secrets['VIEWER_PASSWORD_ST4ST']:
         hover
     ).configure(padding=50).interactive(), use_container_width=True)
 
+    st.header("By country")
+    st.table(df_paid.groupby(['address_country']).count()['customer_name'])
+
+    with st.expander("By province/state"):
+        st.table(df_paid.groupby(['address_country', 'address_province']).count()['customer_name'])
+
     st.header("By item")
     st.table(items_df_paid.groupby('name').count()['customer_name'])
 
@@ -186,19 +218,26 @@ if password == st.secrets['VIEWER_PASSWORD_ST4ST']:
     for _, inv in paid_memos.iterrows():
         st.markdown(f"*{inv['customer_name']}* from *{inv['address_city']}, {inv['address_country']}* {'registered and' if inv['status'] == 'PAID' else ''} said  \n```\n{inv['memo']}")
 
+    if show_map:
+        st.header("Map")
+        st.map(df_paid[['lat', 'lon']])
+
     st.markdown("---")
-    show_donors = st.checkbox("Show donors", False)
-    if show_donors:
-        c0, c1, c2= st.columns(3)
+    show_participants = st.checkbox("Show participants", False)
+    if show_participants:
+        c0, c1, c2, c3 = st.columns(4)
         show_df = df
-        filter_status = c0.selectbox("Paid status", ("ALL", "PAID", "SAVED", "VIEWED", "OVERDUE"), index=1)
+        filter_status = c0.selectbox("Registration status", ("ALL", "PAID", "SAVED", "VIEWED", "OVERDUE"), index=1)
         filter_sent_status = c1.selectbox("Email Confirmation", ("ALL", "NOT_SENT", "MARKED_SENT"), index=1)
-        filter_text = c2.text_input("Search fields")
-        show_columns = st.multiselect("Show columns", list(show_df.columns), ['invoice_number', 'customer_name', 'amountPaid', 'status', 'memo', 'registered_at'])
+        filter_country = c2.selectbox("Country", ["ALL", *show_df['address_country'].unique()])
+        filter_text = c3.text_input("Search fields")
+        show_columns = st.multiselect("Show columns", list(show_df.columns), ['invoice_number', 'customer_name', 'amountPaid', 'status', 'address_country', 'registered_at'])
         if filter_status != "ALL":
             show_df = show_df[show_df['status'] == filter_status]
         if filter_sent_status != "ALL":
             show_df = show_df[show_df['last_sent_via'] == filter_sent_status]
+        if filter_country != "ALL":
+            show_df = show_df[show_df['address_country'] == filter_country]
         if filter_text:
             search = (
                 show_df['customer_name'].str.contains(filter_text, case=False) |
@@ -216,15 +255,49 @@ if password == st.secrets['VIEWER_PASSWORD_ST4ST']:
         st.markdown(f"Showing {len(show_df)} out of all {len(df)}")
         st.write(show_df[show_columns])
         st.download_button(
-            label="Download the donors table above as CSV",
+            label="Download the participants table above as CSV",
             data=convert_df(show_df[show_columns]),
-            file_name='donors.csv',
+            file_name='participants.csv',
+            mime='text/csv',
+        )
+    st.markdown("---")
+    show_items = st.checkbox("Show items", False)
+    if show_items:
+        c0, c1 = st.columns(2)
+        show_df = items_df
+        filter_status = c0.selectbox("Status", ("ALL", "PAID", "SAVED", "VIEWED", "OVERDUE"), index=1)
+        filter_text = c1.text_input("Search")
+        filter_item = st.selectbox("Item", ("ALL", *list(show_df['name'].unique())))
+        show_columns = st.multiselect("Show columns", list(show_df.columns), ['invoice_number', 'status', 'address_country', 'name', 'quantity', 'customer_name', 'amountPaid'])
+        if filter_status != "ALL":
+            show_df = show_df[show_df['status'] == filter_status]
+        if filter_item != "ALL":
+            show_df = show_df[show_df['name'] == filter_item]
+        if filter_text:
+            search = (
+                show_df['customer_name'].str.contains(filter_text, case=False) |
+                show_df['customer_email'].str.contains(filter_text, case=False) |
+                show_df['invoice_number'].str.contains(filter_text, case=False) |
+                show_df['customer_phone'].str.contains(filter_text, case=False) |
+                show_df['address_city'].str.contains(filter_text, case=False) |
+                show_df['address_province'].str.contains(filter_text, case=False) |
+                show_df['address_postal_code'].str.contains(filter_text, case=False) |
+                show_df['address_line_1'].str.contains(filter_text, case=False) |
+                show_df['memo'].str.contains(filter_text, case=False)
+            )
+            show_df = show_df[search]
+        st.markdown(f"Showing {len(show_df)} out of all {len(items_df)}")
+        st.write(show_df[show_columns])
+        st.download_button(
+            label="Download the items table above as CSV",
+            data=convert_df(show_df[show_columns]),
+            file_name='items.csv',
             mime='text/csv',
         )
     
     st.markdown("---")
     if st.button("Clear cache"):
-        st.experimental_memo.clear()
+        st.cache_data.clear()
 
     
 elif password:
