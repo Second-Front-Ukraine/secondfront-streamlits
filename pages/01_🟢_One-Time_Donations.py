@@ -119,9 +119,14 @@ def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv().encode('utf-8')
 
-password = st.text_input("Гасло!", type="password")
+if 'shall_pass' not in st.session_state:
+    password = st.text_input("Гасло!", type="password")
 
-if password == st.secrets['VIEWER_PASSWORD']:
+    if password == st.secrets['VIEWER_PASSWORD']:
+        st.button("Proceed", key="shall_pass")
+    elif password:
+        st.warning("Геть з України, москаль некрасівий! Ой, тобто, пароль неправильний.")
+elif st.session_state.get('shall_pass'):
     st.info("OK")
 
     st.title(f"{CAMPAIGN} stats")
@@ -225,7 +230,3 @@ if password == st.secrets['VIEWER_PASSWORD']:
     st.markdown("---")
     if st.button("Clear cache"):
         st.cache_data.clear()
-
-    
-elif password:
-    st.warning("Геть з України, москаль некрасівий! Ой, тобто, пароль неправильний.")
