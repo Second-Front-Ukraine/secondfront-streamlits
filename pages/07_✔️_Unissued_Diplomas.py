@@ -117,15 +117,15 @@ def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv().encode('utf-8')
 
-
 if 'shall_pass' not in st.session_state:
     password = st.text_input("Гасло!", type="password")
 
     if password == st.secrets['VIEWER_PASSWORD']:
-        st.button("Proceed", key="shall_pass")
+        st.session_state.shall_pass = True
     elif password:
         st.warning("Геть з України, москаль некрасівий! Ой, тобто, пароль неправильний.")
-elif st.session_state.get('shall_pass'):
+
+if st.session_state.get('shall_pass'):
     st.info("OK")
 
     st.title(f"{CAMPAIGN} stats")
