@@ -44,6 +44,20 @@ INVOICES_QUERY = gql("""query($businessId: ID!, $page: Int!, $slug: String!) {
             id
             name
             email
+            address {
+                addressLine1
+                addressLine2
+                city
+                province {
+                    code
+                    name
+                }
+                country {
+                    code
+                    name
+                }
+                postalCode
+            }
             shippingDetails {
                 name
                 phone

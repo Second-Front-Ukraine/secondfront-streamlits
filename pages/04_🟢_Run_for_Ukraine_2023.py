@@ -12,21 +12,33 @@ CAMPAIGN = "2FUA-RFUA2023"
 def get_capmaign_invoices(slug):
     return wave.get_invoices_for_slug(slug)
 
+def sanitize_address(raw_address):
+    city = raw_address.get('city')
+    if city and ', ' in city:
+        city_parts = city.split(', ')
+        city = ', '.join(city_parts[:-1])
+        province = city_parts[-1]
+    else:
+        province = (raw_address.get('province') or {}).get('name')
+    country = (raw_address.get('country') or {}).get('name')
+
+    return (
+        raw_address.get('addressLine1'),
+        raw_address.get('addressLine2'),
+        city,
+        province,
+        country,
+        raw_address.get('postalCode', None)
+    )
+
 
 def invoices_to_df(invoices):
     data = []
 
     for inv in invoices:
         shipping_details = inv['node']['customer'].get('shippingDetails') or {}
-        shipping_address = shipping_details.get('address') or {}
-        city = shipping_address.get('city')
-        if city and ', ' in city:
-            city_parts = city.split(', ')
-            city = ', '.join(city_parts[:-1])
-            province = city_parts[-1]
-        else:
-            province = (shipping_address.get('province') or {}).get('name')
-        country = (shipping_address.get('country') or {}).get('name')
+        shipping_address = sanitize_address(shipping_details.get('address') or {})
+        address_details = sanitize_address(inv['node']['customer'].get('address') or {})
 
         data.append({
             'memo': inv['node']['memo'],
@@ -35,18 +47,25 @@ def invoices_to_df(invoices):
             'last_sent_at': inv['node']['lastSentAt'],
             'last_sent_via': inv['node']['lastSentVia'],
             'registered_at': inv['node']['createdAt'],
+            'createdAt': inv['node']['createdAt'],
             'amountDue': inv['node']['amountDue']['value'],
             'amountPaid': inv['node']['amountPaid']['value'],
             'total': inv['node']['total']['value'],
             'customer_name': inv['node']['customer']['name'],
             'customer_email': inv['node']['customer']['email'],
             'customer_phone': shipping_details.get('phone'),
-            'address_line_1': shipping_address.get('addressLine1'),
-            'address_line_2': shipping_address.get('addressLine2'),
-            'address_city': city,
-            'address_province': province,
-            'address_country': country,
-            'address_postal_code': shipping_address.get('postalCode', None),
+            'shipping_address_line_1': shipping_address[0],
+            'shipping_address_line_2': shipping_address[1],
+            'shipping_address_city': shipping_address[2],
+            'shipping_address_province': shipping_address[3],
+            'shipping_address_country': shipping_address[4],
+            'shipping_address_postal_code': shipping_address[5],
+            'address_line_1': address_details[0],
+            'address_line_2': address_details[1],
+            'address_city': address_details[2],
+            'address_province': address_details[3],
+            'address_country': address_details[4],
+            'address_postal_code': address_details[5],
         })
 
     df = pd.DataFrame(data)
@@ -54,7 +73,9 @@ def invoices_to_df(invoices):
     df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
     df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
     df['registered_at'] = pd.to_datetime(df['registered_at'])
+    df['createdAt'] = pd.to_datetime(df['createdAt'])
     df['registered_at_date'] = df['registered_at'].dt.date
+    df['createdAtDate'] = df['createdAt'].dt.date
 
     return df
 
@@ -64,15 +85,17 @@ def invoices_to_items_df(invoices):
 
     for inv in invoices:
         shipping_details = inv['node']['customer'].get('shippingDetails') or {}
-        shipping_address = shipping_details.get('address') or {}
-        city = shipping_address.get('city')
-        if city and ', ' in city:
-            city_parts = city.split(', ')
-            city = ', '.join(city_parts[:-1])
-            province = city_parts[-1]
-        else:
-            province = (shipping_address.get('province') or {}).get('name')
-        country = (shipping_address.get('country') or {}).get('name')
+        # shipping_address = shipping_details.get('address') or {}
+        # city = shipping_address.get('city')
+        # if city and ', ' in city:
+        #     city_parts = city.split(', ')
+        #     city = ', '.join(city_parts[:-1])
+        #     province = city_parts[-1]
+        # else:
+        #     province = (shipping_address.get('province') or {}).get('name')
+        # country = (shipping_address.get('country') or {}).get('name')
+        shipping_address = sanitize_address(shipping_details.get('address') or {})
+        address_details = sanitize_address(inv['node']['customer'].get('address') or {})
 
         for item in inv['node']['items']:
             data.append({
@@ -82,18 +105,25 @@ def invoices_to_items_df(invoices):
                 'last_sent_at': inv['node']['lastSentAt'],
                 'last_sent_via': inv['node']['lastSentVia'],
                 'registered_at': inv['node']['createdAt'],
+                'createdAt': inv['node']['createdAt'],
                 'amountDue': inv['node']['amountDue']['value'],
                 'amountPaid': inv['node']['amountPaid']['value'],
                 'total': inv['node']['total']['value'],
                 'customer_name': inv['node']['customer']['name'],
                 'customer_email': inv['node']['customer']['email'],
                 'customer_phone': shipping_details.get('phone'),
-                'address_line_1': shipping_address.get('addressLine1'),
-                'address_line_2': shipping_address.get('addressLine2'),
-                'address_city': city,
-                'address_province': province,
-                'address_country': country,
-                'address_postal_code': shipping_address.get('postalCode', None),
+                'shipping_address_line_1': shipping_address[0],
+                'shipping_address_line_2': shipping_address[1],
+                'shipping_address_city': shipping_address[2],
+                'shipping_address_province': shipping_address[3],
+                'shipping_address_country': shipping_address[4],
+                'shipping_address_postal_code': shipping_address[5],
+                'address_line_1': address_details[0],
+                'address_line_2': address_details[1],
+                'address_city': address_details[2],
+                'address_province': address_details[3],
+                'address_country': address_details[4],
+                'address_postal_code': address_details[5],
                 'quantity': item['quantity'],
                 'description': item['description'],
                 'unitPrice': item['unitPrice'],
@@ -109,6 +139,8 @@ def invoices_to_items_df(invoices):
     df['quantity'] = df['quantity'].astype(int)
     df['registered_at'] = pd.to_datetime(df['registered_at'])
     df['registered_at_date'] = df['registered_at'].dt.date
+    df['createdAt'] = pd.to_datetime(df['createdAt'])
+    df['createdAtDate'] = df['createdAt'].dt.date
 
     return df
 
@@ -129,13 +161,21 @@ if st.session_state.get('shall_pass'):
     st.info("OK")
 
     st.title(f"{CAMPAIGN} stats")
+    c0, c1 = st.columns(2)
     invoices = get_capmaign_invoices(CAMPAIGN)
     try:
-        df = invoices_to_df(invoices)
+        all_df = invoices_to_df(invoices)
     except Exception:
         print(invoices)
         raise
-    items_df = invoices_to_items_df(invoices)
+    
+    start_date = c0.date_input("Start date", value=all_df['createdAtDate'].min())
+    end_date = c1.date_input("End date", value=all_df['createdAtDate'].max())
+
+    all_items_df = invoices_to_items_df(invoices)
+    
+    df = all_df[(all_df['createdAtDate'] >= start_date) & (all_df['createdAtDate'] <= end_date)]
+    items_df = all_items_df[(all_items_df['createdAtDate'] >= start_date) & (all_items_df['createdAtDate'] <= end_date)]
 
     df_paid = df[df['status'] == 'PAID']
     df_paid_unconfired = df_paid[df_paid['last_sent_via'] == 'NOT_SENT']
@@ -184,6 +224,8 @@ if st.session_state.get('shall_pass'):
 
     st.header("By item")
     st.table(items_df_paid.groupby('name').count()['customer_name'])
+    st.table(items_df_paid.groupby(by=['name', 'address_city']).count()['createdAt'])
+    st.table(items_df_paid[['name', 'address_city', 'amountPaid']].groupby(by=['name', 'address_city']).sum()['amountPaid'])
 
     st.header("Notes")
     paid_memos = df[(df['memo'].str.len() > 0)]
