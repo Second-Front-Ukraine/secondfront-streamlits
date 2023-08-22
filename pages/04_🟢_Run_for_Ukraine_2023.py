@@ -184,7 +184,6 @@ if st.session_state.get('shall_pass'):
 
     c0, c1, c2, c3 = st.columns(4)
     c0.metric("Total collected", f"{df_paid['amountPaid'].sum():.2f}")
-    # c1.metric("Emails unsent", len(df_paid_unconfired))
     c2.metric("Total donated", len(df_paid))
     c3.metric("Total abandoned", len(invoices_df_unpaid))
 
