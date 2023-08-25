@@ -1,19 +1,24 @@
+from urllib.parse import urlparse, parse_qs
+
 import streamlit as st
 import pandas as pd
 import altair as alt
-from clients import WaveClient
+from clients import WaveClient, TrackingClient, decode_invoice_id
 from geopy.geocoders import Nominatim
 
 
 wave = WaveClient()
 geolocator = Nominatim(user_agent="example app")
-
+tracking = TrackingClient(aws_key=st.secrets['aws']['AWS_ACCESS_KEY_ID'], aws_secret=st.secrets['aws']['AWS_SECRET_ACCESS_KEY'])
 CAMPAIGN = "SECONDFRONT"
 
 @st.cache_data(ttl=600)
 def get_capmaign_invoices(slug):
     return wave.get_invoices_for_slug(slug)
 
+@st.cache_data(ttl=600)
+def get_tracking_data():
+    return tracking.get_all()
 
 def invoices_to_df(invoices):
     data = []
@@ -30,7 +35,9 @@ def invoices_to_df(invoices):
             province = (shipping_address.get('province') or {}).get('name')
         country = (shipping_address.get('country') or {}).get('name')
 
+        _, invoice_id = decode_invoice_id(inv['node']['id'])
         data.append({
+            'id': invoice_id,
             'memo': inv['node']['memo'],
             'status': inv['node']['status'],
             'invoice_number': inv['node']['invoiceNumber'],
@@ -77,7 +84,9 @@ def invoices_to_items_df(invoices):
         country = (shipping_address.get('country') or {}).get('name')
 
         for item in inv['node']['items']:
+            _, invoice_id = decode_invoice_id(inv['node']['id'])
             data.append({
+                'id': invoice_id,
                 'memo': inv['node']['memo'],
                 'status': inv['node']['status'],
                 'invoice_number': inv['node']['invoiceNumber'],
@@ -114,6 +123,18 @@ def invoices_to_items_df(invoices):
 
     return df
 
+def tracking_raw_to_df(data):
+    df = pd.DataFrame(data)
+    def apply_utm_campaign(value):
+        return ','.join(parse_qs(urlparse(value).query).get('utm_campaign', []))
+    df['utm_campaign'] = df['referrer'].apply(apply_utm_campaign)
+
+    def apply_utm_medium(value):
+        return ','.join(parse_qs(urlparse(value).query).get('utm_medium', []))
+    df['utm_medium'] = df['referrer'].apply(apply_utm_medium)
+
+    return df
+
 @st.cache_data
 def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
@@ -138,6 +159,9 @@ if st.session_state.get('shall_pass'):
         print(invoices)
         raise
     items_df = invoices_to_items_df(invoices)
+    tracking_df = tracking_raw_to_df(get_tracking_data())
+
+    df = df.join(tracking_df.set_index('donation_id'), on='id', how='left', rsuffix='tracking')
 
     df_paid = df[df['status'] == 'PAID']
     df_paid_unconfired = df_paid[df_paid['last_sent_via'] == 'NOT_SENT']
@@ -186,6 +210,13 @@ if st.session_state.get('shall_pass'):
 
     st.header("By item")
     st.table(items_df_paid.groupby('name').count()['customer_name'])
+
+    st.header("By UTM campaign")
+    st.table(df_paid[['utm_campaign', 'amountPaid']].groupby('utm_campaign').sum()['amountPaid'])
+
+
+    st.header("By UTM medium")
+    st.table(df_paid[['utm_medium', 'amountPaid']].groupby('utm_medium').sum()['amountPaid'])
 
     st.header("Notes")
     paid_memos = df[(df['memo'].str.len() > 0)]
