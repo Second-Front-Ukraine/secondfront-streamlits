@@ -1,10 +1,8 @@
-from urllib.parse import urlparse, parse_qs
-
 import streamlit as st
-import pandas as pd
 import altair as alt
-from clients import WaveClient, TrackingClient, decode_invoice_id
+from clients import WaveClient, TrackingClient
 from geopy.geocoders import Nominatim
+from common import invoices_to_df, invoices_to_items_df, tracking_raw_to_df
 
 
 wave = WaveClient()
@@ -20,120 +18,6 @@ def get_capmaign_invoices(slug):
 def get_tracking_data():
     return tracking.get_all()
 
-def invoices_to_df(invoices):
-    data = []
-
-    for inv in invoices:
-        shipping_details = inv['node']['customer'].get('shippingDetails') or {}
-        shipping_address = shipping_details.get('address') or {}
-        city = shipping_address.get('city')
-        if city and ', ' in city:
-            city_parts = city.split(', ')
-            city = ', '.join(city_parts[:-1])
-            province = city_parts[-1]
-        else:
-            province = (shipping_address.get('province') or {}).get('name')
-        country = (shipping_address.get('country') or {}).get('name')
-
-        _, invoice_id = decode_invoice_id(inv['node']['id'])
-        data.append({
-            'id': invoice_id,
-            'memo': inv['node']['memo'],
-            'status': inv['node']['status'],
-            'invoice_number': inv['node']['invoiceNumber'],
-            'last_sent_at': inv['node']['lastSentAt'],
-            'last_sent_via': inv['node']['lastSentVia'],
-            'registered_at': inv['node']['createdAt'],
-            'amountDue': inv['node']['amountDue']['value'],
-            'amountPaid': inv['node']['amountPaid']['value'],
-            'total': inv['node']['total']['value'],
-            'customer_name': inv['node']['customer']['name'],
-            'customer_email': inv['node']['customer']['email'],
-            'customer_phone': shipping_details.get('phone'),
-            'address_line_1': shipping_address.get('addressLine1'),
-            'address_line_2': shipping_address.get('addressLine2'),
-            'address_city': city,
-            'address_province': province,
-            'address_country': country,
-            'address_postal_code': shipping_address.get('postalCode', None),
-        })
-
-    df = pd.DataFrame(data)
-    df['total'] = df['total'].str.replace(',', '').astype(float)
-    df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
-    df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
-    df['registered_at'] = pd.to_datetime(df['registered_at'])
-    df['registered_at_date'] = df['registered_at'].dt.date
-
-    return df
-
-
-def invoices_to_items_df(invoices):
-    data = []
-
-    for inv in invoices:
-        shipping_details = inv['node']['customer'].get('shippingDetails') or {}
-        shipping_address = shipping_details.get('address') or {}
-        city = shipping_address.get('city')
-        if city and ', ' in city:
-            city_parts = city.split(', ')
-            city = ', '.join(city_parts[:-1])
-            province = city_parts[-1]
-        else:
-            province = (shipping_address.get('province') or {}).get('name')
-        country = (shipping_address.get('country') or {}).get('name')
-
-        for item in inv['node']['items']:
-            _, invoice_id = decode_invoice_id(inv['node']['id'])
-            data.append({
-                'id': invoice_id,
-                'memo': inv['node']['memo'],
-                'status': inv['node']['status'],
-                'invoice_number': inv['node']['invoiceNumber'],
-                'last_sent_at': inv['node']['lastSentAt'],
-                'last_sent_via': inv['node']['lastSentVia'],
-                'registered_at': inv['node']['createdAt'],
-                'amountDue': inv['node']['amountDue']['value'],
-                'amountPaid': inv['node']['amountPaid']['value'],
-                'total': inv['node']['total']['value'],
-                'customer_name': inv['node']['customer']['name'],
-                'customer_email': inv['node']['customer']['email'],
-                'customer_phone': shipping_details.get('phone'),
-                'address_line_1': shipping_address.get('addressLine1'),
-                'address_line_2': shipping_address.get('addressLine2'),
-                'address_city': city,
-                'address_province': province,
-                'address_country': country,
-                'address_postal_code': shipping_address.get('postalCode', None),
-                'quantity': item['quantity'],
-                'description': item['description'],
-                'unitPrice': item['unitPrice'],
-                'id': item['product']['id'],
-                'name': item['product']['name'],
-            })
-
-    df = pd.DataFrame(data)
-    df['total'] = df['total'].str.replace(',', '').astype(float)
-    df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
-    df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
-    df['unitPrice'] = df['unitPrice'].str.replace(',', '').astype(float)
-    df['quantity'] = df['quantity'].astype(int)
-    df['registered_at'] = pd.to_datetime(df['registered_at'])
-    df['registered_at_date'] = df['registered_at'].dt.date
-
-    return df
-
-def tracking_raw_to_df(data):
-    df = pd.DataFrame(data)
-    def apply_utm_campaign(value):
-        return ','.join(parse_qs(urlparse(value).query).get('utm_campaign', []))
-    df['utm_campaign'] = df['referrer'].apply(apply_utm_campaign)
-
-    def apply_utm_medium(value):
-        return ','.join(parse_qs(urlparse(value).query).get('utm_medium', []))
-    df['utm_medium'] = df['referrer'].apply(apply_utm_medium)
-
-    return df
 
 @st.cache_data
 def convert_df(df):
@@ -213,7 +97,6 @@ if st.session_state.get('shall_pass'):
 
     st.header("By UTM campaign")
     st.table(df_paid[['utm_campaign', 'amountPaid']].groupby('utm_campaign').sum()['amountPaid'])
-
 
     st.header("By UTM medium")
     st.table(df_paid[['utm_medium', 'amountPaid']].groupby('utm_medium').sum()['amountPaid'])

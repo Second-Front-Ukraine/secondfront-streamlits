@@ -1,10 +1,11 @@
 import streamlit as st
-import pandas as pd
 import altair as alt
-from clients import WaveClient
+from clients import WaveClient, TrackingClient
+from common import invoices_to_df, invoices_to_items_df, tracking_raw_to_df
 
 
 wave = WaveClient()
+tracking = TrackingClient(aws_key=st.secrets['aws']['AWS_ACCESS_KEY_ID'], aws_secret=st.secrets['aws']['AWS_SECRET_ACCESS_KEY'])
 
 CAMPAIGN = "2FUA-RFUA2023"
 
@@ -12,137 +13,9 @@ CAMPAIGN = "2FUA-RFUA2023"
 def get_capmaign_invoices(slug):
     return wave.get_invoices_for_slug(slug)
 
-def sanitize_address(raw_address):
-    city = raw_address.get('city')
-    if city and ', ' in city:
-        city_parts = city.split(', ')
-        city = ', '.join(city_parts[:-1])
-        province = city_parts[-1]
-    else:
-        province = (raw_address.get('province') or {}).get('name')
-    country = (raw_address.get('country') or {}).get('name')
-
-    return (
-        raw_address.get('addressLine1'),
-        raw_address.get('addressLine2'),
-        city,
-        province,
-        country,
-        raw_address.get('postalCode', None)
-    )
-
-
-def invoices_to_df(invoices):
-    data = []
-
-    for inv in invoices:
-        shipping_details = inv['node']['customer'].get('shippingDetails') or {}
-        shipping_address = sanitize_address(shipping_details.get('address') or {})
-        address_details = sanitize_address(inv['node']['customer'].get('address') or {})
-
-        data.append({
-            'memo': inv['node']['memo'],
-            'status': inv['node']['status'],
-            'invoice_number': inv['node']['invoiceNumber'],
-            'last_sent_at': inv['node']['lastSentAt'],
-            'last_sent_via': inv['node']['lastSentVia'],
-            'registered_at': inv['node']['createdAt'],
-            'createdAt': inv['node']['createdAt'],
-            'amountDue': inv['node']['amountDue']['value'],
-            'amountPaid': inv['node']['amountPaid']['value'],
-            'total': inv['node']['total']['value'],
-            'customer_name': inv['node']['customer']['name'],
-            'customer_email': inv['node']['customer']['email'],
-            'customer_phone': shipping_details.get('phone'),
-            'shipping_address_line_1': shipping_address[0],
-            'shipping_address_line_2': shipping_address[1],
-            'shipping_address_city': shipping_address[2],
-            'shipping_address_province': shipping_address[3],
-            'shipping_address_country': shipping_address[4],
-            'shipping_address_postal_code': shipping_address[5],
-            'address_line_1': address_details[0],
-            'address_line_2': address_details[1],
-            'address_city': address_details[2],
-            'address_province': address_details[3],
-            'address_country': address_details[4],
-            'address_postal_code': address_details[5],
-        })
-
-    df = pd.DataFrame(data)
-    df['total'] = df['total'].str.replace(',', '').astype(float)
-    df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
-    df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
-    df['registered_at'] = pd.to_datetime(df['registered_at'])
-    df['createdAt'] = pd.to_datetime(df['createdAt'])
-    df['registered_at_date'] = df['registered_at'].dt.date
-    df['createdAtDate'] = df['createdAt'].dt.date
-
-    return df
-
-
-def invoices_to_items_df(invoices):
-    data = []
-
-    for inv in invoices:
-        shipping_details = inv['node']['customer'].get('shippingDetails') or {}
-        # shipping_address = shipping_details.get('address') or {}
-        # city = shipping_address.get('city')
-        # if city and ', ' in city:
-        #     city_parts = city.split(', ')
-        #     city = ', '.join(city_parts[:-1])
-        #     province = city_parts[-1]
-        # else:
-        #     province = (shipping_address.get('province') or {}).get('name')
-        # country = (shipping_address.get('country') or {}).get('name')
-        shipping_address = sanitize_address(shipping_details.get('address') or {})
-        address_details = sanitize_address(inv['node']['customer'].get('address') or {})
-
-        for item in inv['node']['items']:
-            data.append({
-                'memo': inv['node']['memo'],
-                'status': inv['node']['status'],
-                'invoice_number': inv['node']['invoiceNumber'],
-                'last_sent_at': inv['node']['lastSentAt'],
-                'last_sent_via': inv['node']['lastSentVia'],
-                'registered_at': inv['node']['createdAt'],
-                'createdAt': inv['node']['createdAt'],
-                'amountDue': inv['node']['amountDue']['value'],
-                'amountPaid': inv['node']['amountPaid']['value'],
-                'total': inv['node']['total']['value'],
-                'customer_name': inv['node']['customer']['name'],
-                'customer_email': inv['node']['customer']['email'],
-                'customer_phone': shipping_details.get('phone'),
-                'shipping_address_line_1': shipping_address[0],
-                'shipping_address_line_2': shipping_address[1],
-                'shipping_address_city': shipping_address[2],
-                'shipping_address_province': shipping_address[3],
-                'shipping_address_country': shipping_address[4],
-                'shipping_address_postal_code': shipping_address[5],
-                'address_line_1': address_details[0],
-                'address_line_2': address_details[1],
-                'address_city': address_details[2],
-                'address_province': address_details[3],
-                'address_country': address_details[4],
-                'address_postal_code': address_details[5],
-                'quantity': item['quantity'],
-                'description': item['description'],
-                'unitPrice': item['unitPrice'],
-                'id': item['product']['id'],
-                'name': item['product']['name'],
-            })
-
-    df = pd.DataFrame(data)
-    df['total'] = df['total'].str.replace(',', '').astype(float)
-    df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
-    df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
-    df['unitPrice'] = df['unitPrice'].str.replace(',', '').astype(float)
-    df['quantity'] = df['quantity'].astype(int)
-    df['registered_at'] = pd.to_datetime(df['registered_at'])
-    df['registered_at_date'] = df['registered_at'].dt.date
-    df['createdAt'] = pd.to_datetime(df['createdAt'])
-    df['createdAtDate'] = df['createdAt'].dt.date
-
-    return df
+@st.cache_data(ttl=600)
+def get_tracking_data():
+    return tracking.get_all()
 
 @st.cache_data
 def convert_df(df):
@@ -176,6 +49,9 @@ if st.session_state.get('shall_pass'):
     
     df = all_df[(all_df['createdAtDate'] >= start_date) & (all_df['createdAtDate'] <= end_date)]
     items_df = all_items_df[(all_items_df['createdAtDate'] >= start_date) & (all_items_df['createdAtDate'] <= end_date)]
+    tracking_df = tracking_raw_to_df(get_tracking_data())
+
+    df = df.join(tracking_df.set_index('donation_id'), on='id', how='left', rsuffix='tracking')
 
     df_paid = df[df['status'] == 'PAID']
     df_paid_unconfired = df_paid[df_paid['last_sent_via'] == 'NOT_SENT']
@@ -225,6 +101,12 @@ if st.session_state.get('shall_pass'):
     st.table(items_df_paid.groupby('name').count()['customer_name'])
     st.table(items_df_paid.groupby(by=['name', 'address_city']).count()['createdAt'])
     st.table(items_df_paid[['name', 'address_city', 'amountPaid']].groupby(by=['name', 'address_city']).sum()['amountPaid'])
+    
+    st.header("By UTM campaign")
+    st.table(df_paid[['utm_campaign', 'amountPaid']].groupby('utm_campaign').sum()['amountPaid'])
+
+    st.header("By UTM medium")
+    st.table(df_paid[['utm_medium', 'amountPaid']].groupby('utm_medium').sum()['amountPaid'])
 
     st.header("Notes")
     paid_memos = df[(df['memo'].str.len() > 0)]

@@ -1,10 +1,11 @@
 import streamlit as st
-import pandas as pd
 import altair as alt
-from clients import WaveClient
+from clients import WaveClient, TrackingClient
+from common import invoices_to_df, invoices_to_items_df, tracking_raw_to_df
 
 
 wave = WaveClient()
+tracking = TrackingClient(aws_key=st.secrets['aws']['AWS_ACCESS_KEY_ID'], aws_secret=st.secrets['aws']['AWS_SECRET_ACCESS_KEY'])
 
 CAMPAIGN = "2FUA-IRONBIRDS"
 
@@ -12,105 +13,9 @@ CAMPAIGN = "2FUA-IRONBIRDS"
 def get_capmaign_invoices(slug):
     return wave.get_invoices_for_slug(slug)
 
-
-def invoices_to_df(invoices):
-    data = []
-
-    for inv in invoices:
-        shipping_details = inv['node']['customer'].get('shippingDetails') or {}
-        shipping_address = shipping_details.get('address') or {}
-        city = shipping_address.get('city')
-        if city and ', ' in city:
-            city_parts = city.split(', ')
-            city = ', '.join(city_parts[:-1])
-            province = city_parts[-1]
-        else:
-            province = (shipping_address.get('province') or {}).get('name')
-        country = (shipping_address.get('country') or {}).get('name')
-
-        data.append({
-            'memo': inv['node']['memo'],
-            'status': inv['node']['status'],
-            'invoice_number': inv['node']['invoiceNumber'],
-            'last_sent_at': inv['node']['lastSentAt'],
-            'last_sent_via': inv['node']['lastSentVia'],
-            'registered_at': inv['node']['createdAt'],
-            'amountDue': inv['node']['amountDue']['value'],
-            'amountPaid': inv['node']['amountPaid']['value'],
-            'total': inv['node']['total']['value'],
-            'customer_name': inv['node']['customer']['name'],
-            'customer_email': inv['node']['customer']['email'],
-            'customer_phone': shipping_details.get('phone'),
-            'address_line_1': shipping_address.get('addressLine1'),
-            'address_line_2': shipping_address.get('addressLine2'),
-            'address_city': city,
-            'address_province': province,
-            'address_country': country,
-            'address_postal_code': shipping_address.get('postalCode', None),
-        })
-
-    df = pd.DataFrame(data)
-    df['total'] = df['total'].str.replace(',', '').astype(float)
-    df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
-    df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
-    df['registered_at'] = pd.to_datetime(df['registered_at'])
-    df['registered_at_date'] = df['registered_at'].dt.date
-
-    return df
-
-
-def invoices_to_items_df(invoices):
-    data = []
-
-    for inv in invoices:
-        shipping_details = inv['node']['customer'].get('shippingDetails') or {}
-        shipping_address = shipping_details.get('address') or {}
-        city = shipping_address.get('city')
-        if city and ', ' in city:
-            city_parts = city.split(', ')
-            city = ', '.join(city_parts[:-1])
-            province = city_parts[-1]
-        else:
-            province = (shipping_address.get('province') or {}).get('name')
-        country = (shipping_address.get('country') or {}).get('name')
-
-        for item in inv['node']['items']:
-            data.append({
-                'memo': inv['node']['memo'],
-                'status': inv['node']['status'],
-                'invoice_number': inv['node']['invoiceNumber'],
-                'last_sent_at': inv['node']['lastSentAt'],
-                'last_sent_via': inv['node']['lastSentVia'],
-                'registered_at': inv['node']['createdAt'],
-                'amountDue': inv['node']['amountDue']['value'],
-                'amountPaid': inv['node']['amountPaid']['value'],
-                'total': inv['node']['total']['value'],
-                'customer_name': inv['node']['customer']['name'],
-                'customer_email': inv['node']['customer']['email'],
-                'customer_phone': shipping_details.get('phone'),
-                'address_line_1': shipping_address.get('addressLine1'),
-                'address_line_2': shipping_address.get('addressLine2'),
-                'address_city': city,
-                'address_province': province,
-                'address_country': country,
-                'address_postal_code': shipping_address.get('postalCode', None),
-                'quantity': item['quantity'],
-                'description': item['description'],
-                'unitPrice': item['unitPrice'],
-                'id': item['product']['id'],
-                'name': item['product']['name'],
-            })
-
-    df = pd.DataFrame(data)
-    df['total'] = df['total'].str.replace(',', '').astype(float)
-    df['amountDue'] = df['amountDue'].str.replace(',', '').astype(float)
-    df['amountPaid'] = df['amountPaid'].str.replace(',', '').astype(float)
-    df['unitPrice'] = df['unitPrice'].str.replace(',', '').astype(float)
-    df['quantity'] = df['quantity'].astype(int)
-    df['registered_at'] = pd.to_datetime(df['registered_at'])
-    df['registered_at_date'] = df['registered_at'].dt.date
-
-    return df
+@st.cache_data(ttl=600)
+def get_tracking_data():
+    return tracking.get_all()
 
 @st.cache_data
 def convert_df(df):
@@ -136,6 +41,9 @@ if st.session_state.get('shall_pass'):
         print(invoices)
         raise
     items_df = invoices_to_items_df(invoices)
+    tracking_df = tracking_raw_to_df(get_tracking_data())
+
+    df = df.join(tracking_df.set_index('donation_id'), on='id', how='left', rsuffix='tracking')
 
     df_paid = df[df['status'] == 'PAID']
     df_paid_unconfired = df_paid[df_paid['last_sent_via'] == 'NOT_SENT']
@@ -184,6 +92,12 @@ if st.session_state.get('shall_pass'):
 
     st.header("By item")
     st.table(items_df_paid.groupby('name').count()['customer_name'])
+
+    st.header("By UTM campaign")
+    st.table(df_paid[['utm_campaign', 'amountPaid']].groupby('utm_campaign').sum()['amountPaid'])
+
+    st.header("By UTM medium")
+    st.table(df_paid[['utm_medium', 'amountPaid']].groupby('utm_medium').sum()['amountPaid'])
 
     st.header("Notes")
     paid_memos = df[(df['memo'].str.len() > 0)]
